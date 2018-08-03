@@ -102,7 +102,6 @@ import (
 	"fmt"
 	"go/format"
 	"io"
-	"math"
 	"reflect"
 	"sort"
 	"strconv"
@@ -170,9 +169,12 @@ type Parser func(io.Reader) (interface{}, error)
 
 func ParseJson(input io.Reader) (interface{}, error) {
 	var result interface{}
-	if err := json.NewDecoder(input).Decode(&result); err != nil {
+	decoder := json.NewDecoder(input)
+	decoder.UseNumber()
+	if err := decoder.Decode(&result); err != nil {
 		return nil, err
 	}
+
 	return result, nil
 }
 
@@ -489,22 +491,21 @@ func typeForValue(value interface{}, structName string, tags []string, subStruct
 		return "interface{}"
 	}
 	v := reflect.TypeOf(value).Name()
-	if v == "float64" && convertFloats {
-		v = disambiguateFloatInt(value)
+	if v == "Number" {
+		v = disambiguateFloatInt(value.(json.Number))
 	}
+
 	return v
 }
 
-// All numbers will initially be read as float64
-// If the number appears to be an integer value, use int instead
-func disambiguateFloatInt(value interface{}) string {
-	const epsilon = .0001
-	vfloat := value.(float64)
-	if !ForceFloats && math.Abs(vfloat-math.Floor(vfloat+epsilon)) < epsilon {
-		var tmp int64
+func disambiguateFloatInt(number json.Number) string {
+	if strings.ContainsAny(number.String(), ".") {
+		var tmp float64
 		return reflect.TypeOf(tmp).Name()
 	}
-	return reflect.TypeOf(value).Name()
+
+	var tmp int64
+	return reflect.TypeOf(tmp).Name()
 }
 
 // convert first character ints to strings
